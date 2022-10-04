@@ -12,7 +12,17 @@ var upload = require('../helpers/Imageupload')
 router.post('/login', UserController.userLogin)
 router.post('/emptype', auth, UserController.empType)
 
+router.get('/getReportToMember', auth, UserController.getReportToMember)
+router.get('/getReportTo', auth, UserController.getReportTo)
+
 router.get('/emptype', auth, UserController.emptype)
+
+router.get('/getAllUsers',auth,UserController.getAllUsers)
+
+router.get('/info',auth,UserController.getUserInfo)
+
+//get user list on admin  getAllUsers getUserInfo Updateuserprofile getReportToMember
+router.get('/GetUsersData',auth,UserController.GetUsersData)
 
 router.post('/imageUpload',auth, upload.single('image'),  UserController.imageUpload)
 
@@ -20,13 +30,37 @@ router.post('/imageUpload',auth, upload.single('image'),  UserController.imageUp
 // userLeaveRequest emptype imageUpload
 router.get('/userLeaveRequest', auth, UserController.userLeaveRequest)
 router.get('/userLeavedetail', auth, UserController.userLeaveDetail)
-// userInformation
+// router.get('/userLeaveDet', auth, UserController.userLeaveDet)
+
+// userInformation userLeaveDet notification  notificationTotal clearNotification
+router.get('/notification', auth, UserController.notification)
+router.get('/notificationTotal', auth, UserController.notificationTotal)
+router.get('/clearNotification', auth, UserController.clearNotification)
+
+
+
 
 router.get('/userInformation', auth, UserController.userInformation)
 
-//protected Routes  getAllManger
-// allrequests  approved reject
+router.get('/userlist', auth, UserController.userlist)
+router.get('/friendRequests', auth, UserController.friendRequests)
+
+
+
+router.post('/refreshToken', UserController.refreshToken)
+
+//protected Routes  getAllManger refreshToken userlist allfriends
+// allrequests  approved reject  addfriend friendRequests acceptrequect  rejectrequect
 router.get('/approved', UserController.approved)
+router.get('/addfriend',auth, UserController.addfriend)
+router.get('/allfriends',auth, UserController.allfriends)
+
+router.get('/acceptrequect',auth, UserController.acceptrequect)
+router.get('/rejectrequect',auth, UserController.rejectrequect)
+
+
+
+
 router.get('/reject', UserController.reject)
 
 router.get('/allrequests', auth, UserController.allrequest)
@@ -38,8 +72,10 @@ router.get('/getAllManger', auth, UserController.getAllManager)
 router.post('/changepassword', auth, UserController.changeUserPassword)
 router.post('/register', auth, UserController.userRegistration)
 
-// router.post('/userprofile',auth, upload.single('img'),  UserController.userProfile)
+// router.post('/userprofile',auth, upload.single('img'),  UserController.userProfile)  Updateuserprofile
 router.post('/userprofile', auth, UserController.userProfile)
+router.post('/Updateuserprofile', auth, UserController.Updateuserprofile)
+
 
 router.post('/useraccount', auth, UserController.userAccount)
 router.post('/employment', auth, UserController.employment)

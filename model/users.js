@@ -108,6 +108,10 @@ const userSchema = new mongoose.Schema({
         unique: true,
 
     },
+    friends: [{
+        type: mongoose.Schema.Types.ObjectId,
+         ref: 'Friends' }],
+
     emptype_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "empType"

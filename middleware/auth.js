@@ -12,7 +12,7 @@ const auth = async (req, res, next) => {
       
       console.log(token)
       const decode = await jwt.verify(token, 'supersecret')
-      console.log(decode)
+      console.log("decod tocken in nnnnnnnnnnnn",decode)
       const user = await Users.findOne({ _id: decode.userID })
       console.log(user);
       if (!user)
@@ -22,7 +22,7 @@ const auth = async (req, res, next) => {
       next();
    } catch (e) {
       
-      res.status(404).send({error:"authentication error",code:401})
+      res.status(404).send({error:"authentication er",code:401})
       // res.status(200).send({ auth: true, token: token });
 
    }

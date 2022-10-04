@@ -7,13 +7,18 @@ var leaveRequest = require("../model/leaveRequest")
 var UserleaveType = require('../model/leaveType')
 var user_report = require("../model/user_report")
 var employType = require("../model/employType")
+var Friends = require("../model/friends")
 var path = require("path");
 var multer = require('multer');
 var sharp = require('sharp')
 var bcrypt = require('bcryptjs')
 var jwt = require('jsonwebtoken')
 var config = require('../config/config')
+var Notification = require('../model/notification')
+
 const UserProfile = require('../model/userProfile')
+const { stringify } = require('querystring')
+const { json } = require('express')
 
 
 
@@ -23,14 +28,11 @@ class UserController {
 
   //for userRegistration 
   static userRegistration = async (req, res) => {
-    console.log(req.body)
     const totalLeave = await employType.findOne({ _id: req.body.emplType })
-    console.log(totalLeave.totalleave)
     var total = totalLeave.totalleave
 
     // return
     const userData = await UserModel.findOne({ _id: req.user._id })
-    console.log(userData.role)
     const admin = userData.role
     const { username, fname, password, password_confirmation, lastname, title, company, email, role, emplType } = req.body
 
@@ -60,10 +62,8 @@ class UserController {
                 empleave: total
 
               })
-              console.log("doc===", doc)
               await doc.save()
               const saved_user = await UserModel.findOne({ email: email })
-              console.log(saved_user._id)
               const currentUser_id = saved_user._id
 
               //create user report
@@ -85,13 +85,11 @@ class UserController {
                 user_id: currentUser_id
 
               })
-              console.log(lev)
               await lev.save()
               // Generate JWT Token
-              const token = jwt.sign({ userID: saved_user._id }, config.secret, { expiresIn: '5d' })
-              res.status(201).send({ "status": "success", "message": "Registration Success", "token": token, "status": 201 })
+              // const token = jwt.sign({ userID: saved_user._id }, config.secret, { expiresIn: '5d' })
+              res.status(201).send({ "status": "success", "message": "Registration Success", "status": 201 })
             } catch (error) {
-              // console.log(error)
               // res.send({ "status": "failed", "message": "Unable to Register" })
               res.status(500).send(error.message);
             }
@@ -116,17 +114,16 @@ class UserController {
 
     try {
       const { email, password } = req.body
-      console.log(req.body)
       if (email && password) {
         const user = await UserModel.findOne({ email: email })
-        console.log(user.password)
         if (user != null) {
           const isMatch = await bcrypt.compare(req.body.password, user.password);
-          console.log(isMatch)
           if ((user.email === email) && isMatch) {
-            // Generate JWT Token
-            const token = jwt.sign({ userID: user._id, username: user.username }, config.secret, { expiresIn: '5d' })
-            res.status(201).send({ "status": "success", "message": "Login Success", "token": token, "status": 201 })
+            // Generate JWT Token 86400
+            const token = jwt.sign({ userID: user._id, username: user.username }, config.secret, { expiresIn: 10 })
+            const refreshToken = jwt.sign({ userID: user._id, username: user.username }, config.secret, { expiresIn: '5y' })
+
+            res.status(201).send({ "status": "success", "message": "Login Success", "token": token, "refreshToken": refreshToken, "status": 201 })
           } else {
             res.status(401).send({ "status": "failed", "message": "Email or Password is not Valid", "status": 401 })
           }
@@ -137,12 +134,30 @@ class UserController {
         res.status(400).send({ "status": "failed", "message": "All Fields are Required", "status": 400 })
       }
     } catch (error) {
-      console.log(error)
       res.status(401).send({ "status": "failed", "message": "Unable to Login", "status": 401 })
     }
   }
 
+  //refresh token 
+  static refreshToken = async (req, res) => {
+    try {
+      const { token } = req.body
+      if (token) {
+        const decode = await jwt.verify(token, 'supersecret', (err, decode) => {
+          if (err) reject(err)
+          var tokenRefresh = jwt.sign({ userID: decode.userID, username: decode.username }, config.secret, { expiresIn: 10 })
+          res.status(201).send({ "status": "success", "message": "Login Success", "token": tokenRefresh, "status": 201 })
 
+
+        })
+      }
+      else {
+        res.status(403).send('token Unavailable!!')
+      }
+    } catch (err) {
+      res.status(500).json(err)
+    }
+  }
 
 
   // for changeUserPassword
@@ -150,14 +165,10 @@ class UserController {
   static changeUserPassword = async (req, res) => {
 
     const user = await UserModel.findOne({ _id: req.user._id })
-    console.log(user.password)
-
     if (user != null) {
       const isMatch = await bcrypt.compare(req.body.current_password, user.password);
 
       if (isMatch) {
-
-        console.log(req.user._id)
         const { password_confirmation, password, current_password } = req.body
         if (password && password_confirmation) {
 
@@ -199,12 +210,8 @@ class UserController {
   // // for changeUserProfile
 
   // static userProfile = async (req, res) => {
-  //   console.log(req.user._id)
 
   //   const profile = await UserProfile.findOne({ user_id: req.user.id })
-
-  //   console.log(profile)
-
   //   const { img, salutation, fatherName, gender, maritalStatus, religion, nationality, bloodgroup, dob } = req.body
   //   if (!profile) {
 
@@ -252,10 +259,8 @@ class UserController {
 
   //imageUpload
   static imageUpload = async (req, res) => {
-    console.log(req.file)
 
     // for resized image 
-
     const array = [100, 250, 550]
     const pathArray = [];
     for (let i = 0; i < array.length; i++) {
@@ -270,7 +275,6 @@ class UserController {
       pathArray.push(first)
     }
     pathArray.push(req.file.path)
-    console.log(pathArray)
 
     try {
       const result = {
@@ -279,7 +283,6 @@ class UserController {
       }
       res.status(200).send(result)
     } catch (e) {
-      console.log("hello")
       res.status(500).send(e.message)
     }
   }
@@ -289,10 +292,8 @@ class UserController {
   // for changeUserProfile  
 
   static quickcontact = async (req, res) => {
-    console.log(req.user._id)
 
     const { img, salutation, fatherName, gender, maritalStatus, religion, nationality, bloodgroup, dob } = req.body
-    console.log(maritalStatus)
     var doc = {
       img: img,
       salutation: salutation,
@@ -326,8 +327,8 @@ class UserController {
   //userProfile
 
   static userProfile = async (req, res) => {
-    console.log(req.user._id)
     const pathArray = ['image', 'image', 'image2'];
+    // return 
     // // for resized image 
 
     // const array = [100, 250, 550]
@@ -351,10 +352,9 @@ class UserController {
 
     // var religionImage = req.file.path;
     var religionImage = 'image';
-    console.log(req.body.maritalStatus)
 
     const { mobile, quickEmail, lineNumber, CNIC, passportNo, salutation, fatherName, gender, maritalStatus, religion, nationality, bloodgroup, dob
-      , CNICImage, CNICExpire, passportImage, passportExpire, licenseImage, licenseNo, liceseExpire } = req.body
+      , CNICImage, CNICExpire, passportImage, passportExpire, licenseImage, licenseNo, liceseExpire, attachment } = req.body
 
     UserModel.updateOne(
       { _id: req.user.id },
@@ -369,10 +369,10 @@ class UserController {
           "passport.passportNo": passportNo,
           "passport.passportImage": passportImage,
           "passport.passportExpire": passportExpire,
-          "userProfile.0.img.profile_pic.100": pathArray[0],
-          "userProfile.0.img.profile_pic.250": pathArray[1],
-          "userProfile.0.img.profile_pic.550": pathArray[2],
-          "userProfile.0.img.profile_pic.original": religionImage,
+          "userProfile.0.img.profile_pic.100": attachment?.[0],
+          "userProfile.0.img.profile_pic.250": attachment?.[1],
+          "userProfile.0.img.profile_pic.550": attachment?.[2],
+          "userProfile.0.img.profile_pic.original": attachment?.[3],
           "userProfile.0.salutation": salutation,
           "userProfile.0.fatherName": fatherName,
           "userProfile.0.gender": gender,
@@ -408,8 +408,6 @@ class UserController {
   // for userAccount
 
   static userAccount = async (req, res) => {
-    console.log(req.user._id)
-
     const account = await UserAccount.findOne({ user_id: req.user.id })
 
     const { role, timeZone } = req.body
@@ -457,8 +455,6 @@ class UserController {
   // for Employment
 
   static employment = async (req, res) => {
-    console.log(req.user._id)
-
     const emp = await Employment.findOne({ user_id: req.user.id })
 
 
@@ -489,7 +485,6 @@ class UserController {
 
           user_id: req.user.id
         })
-        console.log("kkkkkkkkkkkk", doc)
         await doc.save()
         res.send({ "status": "success", "message": "Employment created  Successfully", "status": 201 })
       } catch (error) {
@@ -523,19 +518,12 @@ class UserController {
   // for QualificationExperience
 
   static qualificationExperience = async (req, res) => {
-    console.log(req.user._id)
 
     const qualifi = await Qualification.findOne({ user_id: req.user.id })
-    console.log(qualifi)
-    console.log("uuuu", req.body.experience)
-
-
     const { companyName, experience, experiencCertification, schoolName, resultDeclar, cgp, resultCard, Name, certificateImage } = req.body
 
     if (!qualifi) {
       try {
-        console.log("okey fine", req.body.experience)
-
         var exp = [];
         req.body.experience.forEach(function (eachObj) {
           var obj = {
@@ -546,7 +534,6 @@ class UserController {
           }
           exp.push(obj);
         })
-        console.log(exp)
 
         var qul = [];
         req.body.qualification.forEach(function (eachObj) {
@@ -559,9 +546,6 @@ class UserController {
           }
           qul.push(obj);
         })
-
-        console.log("kkkkkkkkk", qul)
-
         var certificate = [];
         req.body.certification.forEach(function (eachObj) {
           var obj = {
@@ -570,14 +554,12 @@ class UserController {
           }
           certificate.push(obj);
         })
-        console.log("opsosos", certificate)
         const doc = new Qualification({
           experience: exp,
           certification: certificate,
           qualification: qul,
           user_id: req.user.id
         })
-        console.log(doc)
         await doc.save()
         res.send({ "status": "success", "message": "Employment created  Successfully", "status": 201 })
       } catch (error) {
@@ -588,7 +570,6 @@ class UserController {
     }
 
     else {
-      console.log(req.body)
 
       Qualification.updateOne({ user_id: req.user.id }, { $set: req.body }, (error, data) => {
 
@@ -613,9 +594,17 @@ class UserController {
 
   static qualificationget = async (req, res) => {
     var draw = req.user._id;
-
-    console.log(typeof (draw))
     const result = await UserModel.find({ _id: draw })
+    res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
+
+  }
+
+
+  // get record  allrequests emptype_id
+
+  static getUserInfo = async (req, res) => {
+    var draw = req.query.id;
+    const result = await UserModel.find({ _id: draw }).populate('emptype_id')
     res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
 
   }
@@ -623,16 +612,43 @@ class UserController {
 
   // allrequests for admin ,manager or hr
 
-  static allrequest = async (req, res) => {
+  // static allrequest = async (req, res) => {
+  //   var draw = req.user._id;
+  //   const tttt = await leaveRequest.find({ report_to_id: draw })
+  //   const result = await leaveRequest.find({ report_to_id: draw, status: "pending" }).populate('user_id').sort({ createdAt: -1 })
+
+  //   res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
+
+  // }
+
+
+
+
+  //getAllUsers
+
+  static allrequest = async (req, res, next) => {
+    const result = {};
     var draw = req.user._id;
+    const totalUsers = await leaveRequest.find({ report_to_id: draw, status: "pending" }).countDocuments().exec();
+    result.totalUsers = totalUsers;
 
-    console.log(typeof (draw))
-    const tttt = await leaveRequest.find({ report_to_id: draw })
-    console.log(tttt)
+    var start = parseInt(req.query.start);
+    const limit = parseInt(req.query.length);
 
-    const result = await leaveRequest.find({ report_to_id: draw, status: "pending" }).populate('user_id').sort({ createdAt: -1 })
+    result.data = await leaveRequest.find(
+      { report_to_id: draw, status: "pending" }
 
-    res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
+    ).populate('user_id').skip(start)
+      .limit(limit)
+      .sort({ updatedAt: -1 })
+      .exec();
+    // count search data  for pagination 
+    result.data2 = await leaveRequest.find(
+      { report_to_id: draw, status: "pending" }
+    )
+
+    let totalSearchPost = result.data2
+    res.status(200).send({ data: result.data, totalUsers: totalSearchPost.length })
 
   }
 
@@ -641,8 +657,6 @@ class UserController {
 
   static getAllManager = async (req, res) => {
     var draw = req.user._id;
-
-    console.log(typeof (draw))
     const result = await UserModel.find({ role: 'manager' })
     res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
 
@@ -654,8 +668,6 @@ class UserController {
 
   static employmentget = async (req, res) => {
     var draw = req.user._id;
-
-    console.log(typeof (draw))
     const result = await Employment.find({ user_id: draw })
     res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
 
@@ -665,33 +677,118 @@ class UserController {
 
   static userLeaveDetail = async (req, res) => {
     var draw = req.user._id;
-
-    console.log(typeof (draw))
     const result = await UserleaveType.find({ user_id: draw })
     res.send({ "status": "success", "message": "leave details ", "status": 201, "data": result })
 
   }
 
 
+  // static userLeaveDetail = async (req, res, next) => {
+  //   const result = {};
+  //   var draw = req.user._id;
+  //   const totalUsers = await UserleaveType.find({ user_id: draw }).countDocuments().exec();
+  //   result.totalUsers = totalUsers;
+  //   return
+  //   var start = parseInt(req.query.start);
+  //   const limit = parseInt(req.query.length);
+
+  //   result.data = await leaveRequest.find(
+  //     { report_to_id: draw, status: "pending" }
+
+  //   ).populate('user_id').skip(start)
+  //     .limit(limit)
+  //     .sort({ updatedAt: -1 })
+  //     .exec();
+  //   // count search data  for pagination 
+  //   result.data2 = await leaveRequest.find(
+  //     { report_to_id: draw, status: "pending" }
+  //   )
+
+  //   let totalSearchPost = result.data2
+  //   res.status(200).send({ data: result.data, totalUsers: totalSearchPost.length })
+
+  // }
+
+
+
+
   //get all employee Type
   static emptype = async (req, res) => {
-
-
-    console.log(typeof (draw))
     const result = await employType.find({})
     res.send({ "status": "success", "message": "All emyType ", "status": 201, "data": result })
 
   }
 
 
-  // get leave details emptype
+  //get all Report to member Type
+  static getReportToMember = async (req, res) => {
+    const result = await UserModel.find({ $or: [{ role: "hr" }, { role: "manager" }, { role: "admin" }] })
+    res.send({ "status": "success", "message": "All report To Member ", "status": 201, "data": result })
+
+  }
+
+  // userlist
+  static userlist = async (req, res) => {
+    var draw = req.user._id;
+    const page = parseInt(req.query.page);
+    const skip = parseInt(req.query.skip);
+
+    const limit = page * 4
+    if (page > 1) {
+      var skips = skip * (page - 1)
+    }
+    const result = await UserModel.find({ _id: { $ne: { _id: draw } } }).skip(skips).limit(5).sort({ updatedAt: -1 })
+    // const result = await UserModel.find({ $nor:[{_id:draw}]}).sort({ updatedAt: -1 }).populate("friends")
+
+    res.send({ "status": "success", "message": "leave details ", "status": 201, "data": result, "userID": draw })
+
+  }
+  // get leave details emptype 
 
   static userInformation = async (req, res) => {
     var draw = req.user._id;
-
-    console.log(typeof (draw))
     const result = await UserModel.find({ _id: draw })
     res.send({ "status": "success", "message": "leave details ", "status": 201, "data": result })
+
+  }
+
+  //notification
+  static notification = async (req, res) => {
+    var draw = req.user._id;
+    const page = parseInt(req.query.page);
+    const skip = parseInt(req.query.skip);
+
+    const limit = page * 4
+    if (page > 1) {
+      var skips = skip * (page - 1)
+    }
+    const result = await Notification.find({ $and: [{ reciever_id: draw }, { isread: false }] }).skip(skips).limit(4).populate('sender_id').sort({ updatedAt: -1 })
+      .exec();
+    res.send({ "status": "success", "message": "leave details ", "status": 201, "data": result })
+
+
+  }
+  // clear notification clearNotification
+
+  static clearNotification = async (req, res) => {
+    var draw = req.user._id;
+    await Notification.updateMany(
+      { reciever_id: draw },
+      { $set: { isread: true } }
+    )
+    res.send({ "status": "success", "message": "clear all notification  ", "status": 201, })
+
+
+
+  }
+
+
+  static notificationTotal = async (req, res) => {
+    var draw = req.user._id;
+    const resultTotal = await Notification.find({ $and: [{ reciever_id: draw }, { isread: false }] }).count()
+    const result = await Notification.find({ $and: [{ reciever_id: draw }, { isread: false }] }).limit(4).populate('sender_id')
+    res.send({ "status": "success", "message": "leave details ", "status": 201, "data": result, "totalNotification": resultTotal })
+
 
   }
 
@@ -701,12 +798,8 @@ class UserController {
   static approved = async (req, res) => {
     const cod = req.query.draw
     const result = await leaveRequest.findById({ _id: cod })
-    console.log("result is ===>", result);
     const userdate = await UserleaveType.findOne({ user_id: result.user_id });
-    console.log("userdate");
-
-
-    //leaveRequest
+    //leaveRequest addfriend
     await UserleaveType.updateOne(
       { user_id: result.user_id },
       {
@@ -730,11 +823,112 @@ class UserController {
       },
 
     );
-    res.send({ "status": "success", "message": " leave request is Approved successfullay", "status": 201 })
 
+    res.send({ "status": "success", "message": " leave request is Approved successfullay", "status": 201, "userID": result.user_id })
 
   }
 
+
+  static acceptrequect = async (req, res) => {
+    const requester = req.query.draw
+    const recipient = req.user._id
+    const tes = await Friends.updateOne(
+      { $and: [{ requester: requester }, { recipient: recipient }] },
+      { $set: { "status": 3 } }
+
+    )
+    // await Friends.updateOne(
+    //   { $and: [{ recipient: requester }, { requester: recipient }] },
+    //   { $set: { "status": 3 } }
+
+    // )
+    return res.send({ "status": "success", "message": "  friend  successfully ", "status": tes, })
+
+  }
+
+  //rejectrequect
+
+  static rejectrequect = async (req, res) => {
+    const requester = req.query.draw
+    const recipient = req.user._id
+    await Friends.updateOne(
+      { $and: [{ requester: requester }, { recipient: recipient }] },
+      { $set: { "status": 0 } }
+
+    )
+    return res.send({ "status": "success", "message": "  Friend Request Rejected   successfully ", "status": 201, })
+
+  }
+
+  //for friend request friendRequests acceptrequect
+
+  static addfriend = async (req, res) => {
+    //replace each other 
+    const recipient = req.query.draw
+    const requester = req.user._id
+    if (!requester) {
+      return
+    }
+    const docA = await Friends.findOne({ requester: requester, recipient: recipient, status: 2 })
+    if (docA) {
+      return "already request sent"
+    }
+
+    await Friends.findOneAndUpdate(
+      { requester: requester, recipient: recipient },
+      { $set: { status: 2 } },
+      { upsert: true, new: true }
+    )
+
+
+    // const docA = await Friends.findOneAndUpdate(
+    //   { requester: requester, recipient: recipient },
+    //   { $set: { status: 2 } },
+    //   { upsert: true, new: true }
+    // )
+    // const docB = await Friends.findOneAndUpdate(
+    //   { recipient: requester, requester: recipient },
+    //   { $set: { status: 1 } },
+    //   { upsert: true, new: true }
+    // )
+    // const updaterequester = await UserModel.findOneAndUpdate(
+    //   { _id: requester },
+    //   { $push: { friends: docA._id } }
+    // )
+    // const updaterecipient = await UserModel.findOneAndUpdate(
+    //   { _id: recipient },
+    //   { $push: { friends: docB._id } }
+    // )
+    return res.send({ "status": "success", "message": " your friend request successfully ", "status": 201, })
+
+  }
+
+  // friendRequests
+
+  static friendRequests = async (req, res) => {
+    const id = req.user._id
+    const result = await Friends.find({ recipient: id }).populate('requester')
+    // const result = await Friends.find({ $or: [{ requester:id}, { recipient: id }] }).populate('recipient')
+    return res.send({ "status": "success", "message": " Get all firend requests successfullay", "status": 201, "result": result })
+
+  }
+
+  //all friend request 
+  static allfriends = async (req, res) => {
+    const id = req.user._id
+    const page = parseInt(req.query.page);
+    const skip = parseInt(req.query.skip);
+
+    const limit = page * 4
+    if (page > 1) {
+      var skips = skip * (page - 1)
+    }
+    const result = await Friends.find({ $or: [{ requester: id }, { recipient: id }], $and: [{ status: 3 }] }).skip(skips).limit(5).populate('recipient').populate("requester")
+
+    return res.send({ "status": "success", "message": " Get all firend requests successfullay", "status": 201, "result": result })
+
+
+  }
 
 
 
@@ -745,11 +939,7 @@ class UserController {
   static reject = async (req, res) => {
     const cod = req.query.draw
     const result = await leaveRequest.findById({ _id: cod })
-    console.log("result is ===>", result);
     const userdate = await UserleaveType.findOne({ user_id: result.user_id });
-    console.log("userdate");
-
-
     //leaveRequest
     await UserleaveType.updateOne(
       { user_id: result.user_id },
@@ -774,7 +964,7 @@ class UserController {
       },
 
     );
-    res.send({ "status": "success", "message": " leave request is Approved successfullay", "status": 201 })
+    res.send({ "status": "success", "message": " leave request is reject successfullay", "status": 201, "userID": result.user_id })
 
 
   }
@@ -784,63 +974,96 @@ class UserController {
   //leave Request
 
   static leaveRequest = async (req, res) => {
-    console.log(req.user._id)
     //let data = await BookModel.findOne().populate("loaned_to");
 
     const userData = await user_report.findOne({ new_user_id: req.user._id })
     const report_to_id = userData.report_to_id
-    console.log("hhhhhhhhhhhhhh" + userData.report_to_id)
-
     const { leaveType, short, shortLeaveType, startDate, endDate, count, totalCount, attachment, reason } = req.body
     try {
 
       const data = await UserleaveType.find({ user_id: req.user._id })
 
-      if (data[0].available > 0) {
-        console.log("heoo it is working")
-        const doc = new leaveRequest({
-          leaveType: leaveType,
-          short: short,
-          shortLeaveType: shortLeaveType,
-          startDate: startDate,
-          endDate: endDate,
-          count: count,
-          totalCount: totalCount,
-          attachment: attachment,
-          reason: reason,
-          status: 'pending',
-          report_to_id: report_to_id,
-          user_id: req.user.id
-        })
-        console.log(doc)
+      if (data[0].available > 0 && count <= data[0].available) {
+        // && short == false
+        if (short == false) {
+          const doc = new leaveRequest({
+            leaveType: leaveType,
+            short: short,
+            shortLeaveType: shortLeaveType,
+            startDate: startDate,
+            endDate: endDate,
+            count: count,
+            totalCount: totalCount,
+            attachment: attachment,
+            reason: reason,
+            status: 'pending',
+            report_to_id: report_to_id,
+            user_id: req.user.id
+          })
+          await doc.save()
+        } else if (short == true && count < 2) {
 
-        await doc.save()
+          const doc = new leaveRequest({
+            leaveType: leaveType,
+            short: short,
+            shortLeaveType: shortLeaveType,
+            startDate: startDate,
+            endDate: endDate,
+            count: 0.5,
+            totalCount: 0.5,
+            attachment: attachment,
+            reason: reason,
+            status: 'pending',
+            report_to_id: report_to_id,
+            user_id: req.user.id
+          })
+          await doc.save()
+
+        } else {
+          return res.send({ "status": "success", "message": "leaveRequest created  Successfully", "status": 402, "report_to_id": report_to_id, 'user_id': req.user.id })
+
+        }
 
         const result = await UserleaveType.find({ user_id: req.user._id })
-        // console.log(result[0].balance - count)
-
-
-        await UserleaveType.updateOne(
-          { user_id: req.user._id },
-          {
-            $set: {
-              "balance": result[0].balance,
-              "leavetype": leaveType,
-              "availed": result[0].availed,
-              "available": result[0].available - count,
-              "pending": result[0].pending + count,
+        if (short == false) {
+          await UserleaveType.updateOne(
+            { user_id: req.user._id },
+            {
+              $set: {
+                "balance": result[0].balance,
+                "leavetype": leaveType,
+                "availed": result[0].availed,
+                "available": result[0].available - count,
+                "pending": result[0].pending + count,
+              },
             },
-          },
 
-        );
+          );
+        } else {
+          await UserleaveType.updateOne(
+            { user_id: req.user._id },
+            {
+              $set: {
+                "balance": result[0].balance,
+                "leavetype": leaveType,
+                "availed": result[0].availed,
+                "available": result[0].available - 0.5,
+                "pending": result[0].pending + 0.5,
+              },
+            },
+
+          );
+
+        }
+
 
 
       } else {
-        return res.send({ "status": "success", "message": "leaveRequest created  Successfully", "status": 401 })
+        return res.send({ "status": "success", "message": "leaveRequest created  Successfully", "status": 401, "report_to_id": report_to_id, 'user_id': req.user.id })
       }
 
 
-      res.send({ "status": "success", "message": "leaveRequest created  Successfully", "status": 201 })
+      res.send({ "status": "success", "message": "leaveRequest created  Successfully", "status": 201, "report_to_id": report_to_id, 'user_id': req.user.id })
     } catch (error) {
 
       res.status(500).send(error.message);
@@ -849,19 +1072,46 @@ class UserController {
 
 
 
-  // get leaveRequests 
+  // // get leaveRequests 
 
-  static userLeaveRequest = async (req, res) => {
+  // static userLeaveRequest = async (req, res) => {
+  //   var draw = req.user._id;
+  //   // const result = await leaveRequest.find({ user_id: draw }).populate('user_id').populate('Employment')
+  //   // const result = await UserModel.find({ _id: draw }).populate('Employment').populate('leaveRequest').populate("user_report")
+  //   await UserModel.find({ _id: draw }).populate({
+  //     path: 'leaveRequest',
+  //     options: {
+  //       limit: 1,
+  //       sort: { createdAt: -1 },
+  //     }
+  //   }).populate('Employment').populate("user_report").exec(function (err, result) {
+  //     if (err) return handleError(res, err);
+  //     res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
+
+  //   });
+
+
+  // }
+
+
+  static userLeaveRequest = async (req, res, next) => {
+    const result = {};
     var draw = req.user._id;
-    // console.log()
+    var start = parseInt(req.query.start);
+    const limit = parseInt(req.query.length);
+    // totalUsers: totalSearchPost.length 
+    const totalRequest = await leaveRequest.find({ user_id: draw })
+    result.data = await UserModel.find({ _id: draw }).populate({
+      path: 'leaveRequest',
+      options: {
+        skip: start,
+        limit: limit,
+        sort: { createdAt: -1 },
+      }
+    }).populate('Employment').populate("user_report").exec();
 
 
-    console.log(typeof (draw))
-    // const result = await leaveRequest.find({ user_id: draw }).populate('user_id').populate('Employment')
-    const result = await UserModel.find({ _id: draw }).populate('Employment').populate('leaveRequest').populate("user_report")
-
-    console.log(result)
-    res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
+    res.status(200).send({ data: result.data, totalUsers: totalRequest.length })
 
   }
 
@@ -869,13 +1119,9 @@ class UserController {
   static assigned = async (req, res) => {
 
     const userData = await UserModel.findOne({ _id: req.user._id })
-    console.log(userData.role)
     const admin = userData.role
 
     if (admin === 'admin') {
-
-      console.log(req.user._id)
-
       user_report.updateOne(
         { new_user_id: req.body.new_user_id },
         {
@@ -910,11 +1156,9 @@ class UserController {
 
 
 
-  //for add employment Type  
+  //for add employment Type   GetProductData
   static empType = async (req, res) => {
-    console.log(req.body)
     const userData = await UserModel.findOne({ _id: req.user._id })
-    console.log(userData.role)
     const admin = userData.role
     const { empType, totalleave, probationLeave, weddingLeave, bereavementLeave, casualleave, sickLeave } = req.body
 
@@ -931,7 +1175,6 @@ class UserController {
           probationLeave: probationLeave,
 
         })
-        console.log("doc===", doc)
         await doc.save()
 
         res.status(201).send({ "status": "success", "message": "Registration Success", "status": 201 })
@@ -951,7 +1194,199 @@ class UserController {
   }
 
 
+  static GetUsersData = async (req, res, next) => {
 
+    try {
+
+
+      var start = parseInt(req.query.start);
+      const limit = parseInt(req.query.length);
+      const result = {};
+      var search_value = req.query.search;
+      const totalUsers = await UserModel.countDocuments().exec();
+      result.totalUsers = totalUsers;
+      result.rowsPerPage = limit;
+      if (search_value == 'undefined') {
+        //if search Value in empty
+      } else {
+
+        result.data = await UserModel.find(
+          {
+            $or: [{ username: { $regex: search_value, "$options": "i" } },
+
+
+            ]
+
+          }
+
+        ).populate('Employment').skip(start)
+          .limit(limit)
+          .sort({ updatedAt: -1 })
+          .exec();
+        result.rowsPerPage = limit;
+
+
+
+      }
+
+      // count search data  for pagination 
+      result.data2 = await UserModel.find(
+        {
+          $or: [{ username: { $regex: search_value, "$options": "i" } },
+
+          ]
+        }
+
+      )
+
+
+      let totalSearchPost = result.data2
+
+      // if search value are found
+      if (search_value) {
+        res.status(200).send({ data: result.data, totalUsers: totalUsers, recordsFiltered: totalSearchPost.length })
+      }
+      else {
+        res.status(200).send({ data: result.data, totalUsers: totalUsers, recordsFiltered: totalUsers })
+
+      }
+
+    } catch (e) {
+      res.status(500).send(e.message)
+    }
+
+
+  }
+
+
+
+  //getAllUsers
+
+  static getAllUsers = async (req, res, next) => {
+    const result = {};
+    const totalUsers = await UserModel.countDocuments().exec();
+    result.totalUsers = totalUsers;
+
+    var start = parseInt(req.query.start);
+    const limit = parseInt(req.query.length);
+    var search_value = req.query.search;
+    result.data = await UserModel.find(
+      {
+        $or: [{ username: { $regex: search_value, "$options": "i" } },
+
+
+        ]
+
+      }
+
+    ).populate('Employment').skip(start)
+      .limit(limit)
+      .sort({ updatedAt: -1 })
+      .exec();
+
+    // count search data  for pagination 
+    result.data2 = await UserModel.find(
+      {
+        $or: [{ username: { $regex: search_value, "$options": "i" } },
+        ]
+      }
+    )
+
+    let totalSearchPost = result.data2
+    res.status(200).send({ data: result.data, totalUsers: totalSearchPost.length })
+
+  }
+
+  //get all Report to member Type
+  static getReportTo = async (req, res) => {
+    var id = req.query.id;
+
+    const data = await user_report.findOne({ new_user_id: id })
+    const reportToId = data?.report_to_id
+    if (reportToId) {
+      const result = await UserModel.findOne({ _id: reportToId })
+      res.send({ "status": "success", "message": "All report To Member ", "status": 201, "data": result })
+    }
+
+  }
+
+  // admin change user profile info 
+
+  static Updateuserprofile = async (req, res) => {
+    // return
+    const totalLeave = await employType.findOne({ _id: req.body.emplType })
+    var total = totalLeave.totalleave
+    var leavetype = totalLeave.empType
+    const { username, fname, lastname, title, company, email, role, emplType, user_id, reportToId } = req.body
+
+
+    UserModel.updateOne(
+      { _id: user_id },
+      {
+        $set: {
+          "username": username,
+          "fname": fname,
+          "lastname": lastname,
+          "title": title,
+          "company": company,
+          "email": email,
+          "role": role,
+          "emptype_id": emplType,
+          "empleave": total
+        },
+      },
+
+      (error, data) => {
+
+        if (error) {
+          res.status(200).send({ "status": "failed", "message": "some thing went wrong ,data can not be update", "status": 400, "message": data })
+        }
+        else {
+          UserleaveType.updateOne(
+            { user_id: user_id },
+            {
+              $set: {
+                "balance": total,
+                "available": total,
+                "availed": 0,
+                "pending": 0,
+                "leavetype": leavetype,
+
+              },
+            },
+
+          ).lean().exec();
+
+          user_report.updateOne(
+            { user_id: user_id },
+            {
+              $set: {
+                "new_user_id": user_id,
+                "report_to_id": reportToId,
+                "assign_by_id": req.user._id,
+
+
+              },
+            },
+
+          ).lean().exec();
+
+
+
+
+
+          leaveRequest.findOneAndDelete({ user_id: user_id }, (err, result) => {
+
+          })
+
+          res.status(200).send({ "status": "success", "message": "profile Update  Successfully", "status": 201 })
+        }
+
+      }
+    );
+
+
+  }
 
 }
 

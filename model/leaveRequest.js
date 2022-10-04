@@ -42,7 +42,9 @@ const leaveRequestSchema = new mongoose.Schema({
     },
     attachment: {
         type: String,
-        required: true,
+        // required: true,
+        default: null
+
 
     },
     reason: {
