@@ -30,16 +30,11 @@ class UserController {
   static userRegistration = async (req, res) => {
     const totalLeave = await employType.findOne({ _id: req.body.emplType })
     var total = totalLeave.totalleave
-
-    // return
     const userData = await UserModel.findOne({ _id: req.user._id })
     const admin = userData.role
     const { username, fname, password, password_confirmation, lastname, title, company, email, role, emplType } = req.body
 
     if (admin === 'admin') {
-
-
-
       const user = await UserModel.findOne({ email: email })
 
       if (user) {
@@ -75,7 +70,6 @@ class UserController {
               })
               await rep.save()
               // for leaves
-
               const lev = new UserleaveType({
                 leavetype: "probation",
                 balance: total,
@@ -90,7 +84,6 @@ class UserController {
               // const token = jwt.sign({ userID: saved_user._id }, config.secret, { expiresIn: '5d' })
               res.status(201).send({ "status": "success", "message": "Registration Success", "status": 201 })
             } catch (error) {
-              // res.send({ "status": "failed", "message": "Unable to Register" })
               res.status(500).send(error.message);
             }
           } else {
@@ -105,7 +98,6 @@ class UserController {
       res.send({ "status": "failed", "message": "only Admin can add " })
 
     }
-
 
   }
 
@@ -148,7 +140,6 @@ class UserController {
           var tokenRefresh = jwt.sign({ userID: decode.userID, username: decode.username }, config.secret, { expiresIn: 10 })
           res.status(201).send({ "status": "success", "message": "Login Success", "token": tokenRefresh, "status": 201 })
 
-
         })
       }
       else {
@@ -158,7 +149,6 @@ class UserController {
       res.status(500).json(err)
     }
   }
-
 
   // for changeUserPassword
 
@@ -203,8 +193,6 @@ class UserController {
     }
 
   }
-
-
 
 
   // // for changeUserProfile
@@ -259,6 +247,7 @@ class UserController {
 
   //imageUpload
   static imageUpload = async (req, res) => {
+    console.log("jdddddddddddddddd>>>>>>>>>>>.",req.body)
 
     // for resized image 
     const array = [100, 250, 550]
@@ -313,46 +302,16 @@ class UserController {
         res.status(400).send({ "status": "failed", "message": "some thing went wrong ,data can not be update", "status": 400 })
       }
       else {
-
         res.status(201).send({ "status": "success", "message": "Profile update  Successfully", "status": 201 })
       }
-
     })
-
-
   }
-
-
 
   //userProfile
 
   static userProfile = async (req, res) => {
     const pathArray = ['image', 'image', 'image2'];
-    // return 
-    // // for resized image 
-
-    // const array = [100, 250, 550]
-    // const pathArray = [];
-
-
-
-    // for (let i = 0; i < array.length; i++) {
-    //   const { filename: profileImage } = req.file;
-    //   await sharp(req.file.path)
-    //     .resize(array[i], array[i])
-    //     .jpeg({ quality: 90 })
-    //     .toFile(
-    //       path.resolve('resized', req.file.destination, array[i].toString(), profileImage)
-    //     )
-    //   const first = path.resolve('resized', req.file.destination, array[i].toString(), profileImage)
-    //   pathArray.push(first)
-    // }
-
-
-
-    // var religionImage = req.file.path;
     var religionImage = 'image';
-
     const { mobile, quickEmail, lineNumber, CNIC, passportNo, salutation, fatherName, gender, maritalStatus, religion, nationality, bloodgroup, dob
       , CNICImage, CNICExpire, passportImage, passportExpire, licenseImage, licenseNo, liceseExpire, attachment } = req.body
 
@@ -403,15 +362,11 @@ class UserController {
 
   }
 
-
-
   // for userAccount
 
   static userAccount = async (req, res) => {
     const account = await UserAccount.findOne({ user_id: req.user.id })
-
     const { role, timeZone } = req.body
-
     if (!account) {
       try {
         salutation
@@ -447,21 +402,12 @@ class UserController {
     }
   }
 
-
-
-
-
-
   // for Employment
 
   static employment = async (req, res) => {
     const emp = await Employment.findOne({ user_id: req.user.id })
-
-
     const { userDefinedCode, joiningDate, department, empGrade, finalAuthority, hod, linemanager, attendance, location, branch, designation, lineManager, finAuthority, probationPeriod
       , employee, employmed } = req.body
-
-
     if (!emp) {
       try {
 
@@ -512,11 +458,7 @@ class UserController {
     }
   }
 
-
-
-
   // for QualificationExperience
-
   static qualificationExperience = async (req, res) => {
 
     const qualifi = await Qualification.findOne({ user_id: req.user.id })
@@ -587,9 +529,6 @@ class UserController {
     }
   }
 
-
-
-
   // get record  allrequests
 
   static qualificationget = async (req, res) => {
@@ -598,7 +537,6 @@ class UserController {
     res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
 
   }
-
 
   // get record  allrequests emptype_id
 
@@ -652,7 +590,6 @@ class UserController {
 
   }
 
-
   // get list of manager
 
   static getAllManager = async (req, res) => {
@@ -662,8 +599,6 @@ class UserController {
 
   }
 
-
-
   // get record 
 
   static employmentget = async (req, res) => {
@@ -672,8 +607,6 @@ class UserController {
     res.send({ "status": "success", "message": "Qualification update  Successfully", "status": 201, "data": result })
 
   }
-
-
 
   static userLeaveDetail = async (req, res) => {
     var draw = req.user._id;
